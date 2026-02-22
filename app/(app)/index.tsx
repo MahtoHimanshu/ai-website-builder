@@ -15,6 +15,7 @@ import { useChatStore } from '../../src/stores/chatStore';
 import { ProjectCard } from '../../src/components/projects/ProjectCard';
 import { CreateProjectModal } from '../../src/components/projects/CreateProjectModal';
 import { GitHubCredentialsModal, GitHubCredentials } from '../../src/components/projects/GitHubCredentialsModal';
+import { useGitHubStore } from '../../src/stores/githubStore';
 import { LoadingSpinner } from '../../src/components/common/LoadingSpinner';
 import { Project } from '../../src/types';
 
@@ -24,6 +25,7 @@ export default function ProjectListScreen() {
     deleteProject, renameProject, isLoading,
   } = useProjectStore();
   const { reset: resetChat } = useChatStore();
+  const { setCredentials } = useGitHubStore();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -148,6 +150,7 @@ export default function ProjectListScreen() {
         savedCredentials={savedGitHubCreds}
         onSave={(creds) => {
           setSavedGitHubCreds(creds);
+          setCredentials(creds);   // also makes PAT available to githubService
           setShowGitHub(false);
         }}
       />

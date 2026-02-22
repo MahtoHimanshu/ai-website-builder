@@ -14,6 +14,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, router } from 'expo-router';
 import { useProjectStore } from '../../../src/stores/projectStore';
 import { useChatStore } from '../../../src/stores/chatStore';
+import { useGitHubStore } from '../../../src/stores/githubStore';
+import { pushComment } from '../../../src/services/githubService';
 import { PreviewWebView } from '../../../src/components/preview/PreviewWebView';
 import { ChatList } from '../../../src/components/chat/ChatList';
 import { ChatInput } from '../../../src/components/chat/ChatInput';
@@ -33,6 +35,12 @@ export default function WorkspaceScreen() {
     messages, isStreaming, buildStatus, statusMessage,
     sendMessage, cancelStream, loadHistory, reset,
   } = useChatStore();
+  const { pat } = useGitHubStore();
+
+  // GitHub push status — separate from the AI build status
+  type GitHubStatus = 'idle' | 'pushing' | 'pushed' | 'error';
+  const [ghStatus, setGhStatus] = useState<GitHubStatus>('idle');
+  const [ghMessage, setGhMessage] = useState('');
 
   // ─────────────────────────────────────────────────────────────
   // HOW THE KEYBOARD ANIMATION WORKS (Safari / WhatsApp style)
@@ -108,8 +116,29 @@ export default function WorkspaceScreen() {
 
   const handleSend = useCallback(async (content: string) => {
     if (!projectId) return;
-    await sendMessage(projectId, content);
-  }, [projectId, sendMessage]);
+
+    // 1. Normal chat flow (AI / mock)
+    sendMessage(projectId, content);
+
+    // 2. Push comment to GitHub template repo — skip silently if no PAT configured
+    if (!pat) return;
+
+    setGhStatus('pushing');
+    setGhMessage('Pushing to GitHub…');
+
+    try {
+      await pushComment(pat, content);
+      setGhStatus('pushed');
+      setGhMessage('Pushed to website-service ✓');
+      setTimeout(() => setGhStatus('idle'), 3000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'GitHub push failed.';
+      setGhStatus('error');
+      setGhMessage(msg);
+      // Auto-clear error after 6 s
+      setTimeout(() => setGhStatus('idle'), 6000);
+    }
+  }, [projectId, sendMessage, pat]);
 
   const handleOpenFullscreen = useCallback(() => {
     router.push(`/(app)/preview/${projectId}`);
@@ -150,6 +179,24 @@ export default function WorkspaceScreen() {
       */}
       <View style={styles.chatPanel}>
         <StatusBanner status={buildStatus} message={statusMessage} />
+
+        {/* GitHub push status */}
+        {ghStatus !== 'idle' && (
+          <View style={[
+            styles.ghBanner,
+            ghStatus === 'pushed' && styles.ghBannerSuccess,
+            ghStatus === 'error'  && styles.ghBannerError,
+          ]}>
+            <Text style={[
+              styles.ghBannerIcon,
+              ghStatus === 'pushed' && styles.ghBannerIconSuccess,
+              ghStatus === 'error'  && styles.ghBannerIconError,
+            ]}>
+              {ghStatus === 'pushing' ? '↑' : ghStatus === 'pushed' ? '✓' : '✗'}
+            </Text>
+            <Text style={styles.ghBannerText} numberOfLines={1}>{ghMessage}</Text>
+          </View>
+        )}
 
         {/*
           bottomPadding reserves space so the last message is always
@@ -232,4 +279,28 @@ const styles = StyleSheet.create({
   inputSafeArea: {
     backgroundColor: '#0A0D14',
   },
+
+  // ── GitHub push banner ──────────────────────────────────────────
+  ghBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    backgroundColor: '#0D1117',
+    borderLeftWidth: 3,
+    borderLeftColor: '#334155',
+    gap: 8,
+  },
+  ghBannerSuccess: { borderLeftColor: '#34D399' },
+  ghBannerError:   { borderLeftColor: '#F87171' },
+  ghBannerIcon: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#475569',
+    width: 14,
+    textAlign: 'center',
+  },
+  ghBannerIconSuccess: { color: '#34D399' },
+  ghBannerIconError:   { color: '#F87171' },
+  ghBannerText: { color: '#94A3B8', fontSize: 11, flex: 1 },
 });
