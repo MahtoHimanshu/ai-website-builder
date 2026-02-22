@@ -1,4 +1,4 @@
-# WebForge Mobile — AI Website Builder
+# AI Website Builder
 
 A production-ready React Native (Expo) thin client for an enterprise AI website builder.
 
