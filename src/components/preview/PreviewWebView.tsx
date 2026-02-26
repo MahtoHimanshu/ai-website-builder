@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useProjectStore } from '../../stores/projectStore';
@@ -39,14 +39,33 @@ interface Props {
 //    We are a viewer. We do NOT modify the previewed website's JS.
 // ─────────────────────────────────────────────────────────────
 
-const PREVIEW_ORIGIN = ENV.previewBaseUrl.startsWith('http://localhost')
-  ? 'http://localhost:*'
-  : ENV.previewBaseUrl;
+function originFromUrl(url: string): string {
+  if (url.startsWith('http://localhost')) return 'http://localhost:*';
+  try {
+    const { protocol, hostname } = new URL(url);
+    // Allow the full *.vercel.app subdomain space so per-project
+    // deployments (different subdomain per project) are all permitted.
+    if (hostname.endsWith('.vercel.app')) return `${protocol}//*.vercel.app`;
+    return `${protocol}//${hostname}`;
+  } catch {
+    return url;
+  }
+}
+
+// Static whitelist from the ENV base URL (covers the template / legacy preview)
+const BASE_ORIGIN = originFromUrl(ENV.previewBaseUrl);
 
 export function PreviewWebView({ onOpenFullscreen }: Props) {
   const { previewUrl, previewVersion, refreshPreview } = useProjectStore();
+  const [httpErrorCode, setHttpErrorCode] = useState<number | null>(null);
+
+  // Clear HTTP error state whenever the WebView remounts (new previewVersion)
+  useEffect(() => {
+    setHttpErrorCode(null);
+  }, [previewVersion]);
 
   const handleReload = useCallback(() => {
+    setHttpErrorCode(null);
     refreshPreview();
   }, [refreshPreview]);
 
@@ -58,6 +77,29 @@ export function PreviewWebView({ onOpenFullscreen }: Props) {
         <Text style={styles.placeholderSub}>
           Send a message below to generate your website
         </Text>
+      </View>
+    );
+  }
+
+  // Show our own placeholder instead of letting the Vercel 404 page render
+  // inside the WebView. This happens on brand-new projects where Vercel
+  // hasn't finished its first deployment yet.
+  if (httpErrorCode !== null) {
+    const isDeploying = httpErrorCode === 404;
+    return (
+      <View style={styles.placeholder}>
+        <Text style={styles.placeholderIcon}>{isDeploying ? '⏳' : '⚠️'}</Text>
+        <Text style={styles.placeholderTitle}>
+          {isDeploying ? 'Deployment in progress' : `Preview error (${httpErrorCode})`}
+        </Text>
+        <Text style={styles.placeholderSub}>
+          {isDeploying
+            ? 'Vercel is building your site for the first time.\nTap Reload in ~1 minute.'
+            : 'The preview returned an unexpected error.'}
+        </Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={handleReload}>
+          <Text style={styles.retryText}>Reload</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -75,7 +117,9 @@ export function PreviewWebView({ onOpenFullscreen }: Props) {
         source={{ uri: previewUrl }}
         style={styles.webView}
         // ── Security ────────────────────────────────────────────
-        originWhitelist={[PREVIEW_ORIGIN]}
+        // Allow the BASE_ORIGIN (template / ENV base) AND the per-project
+        // origin derived from the current previewUrl.
+        originWhitelist={[BASE_ORIGIN, originFromUrl(previewUrl)].filter(Boolean)}
         allowFileAccess={false}
         allowUniversalAccessFromFileURLs={false}
         allowFileAccessFromFileURLs={false}
@@ -99,7 +143,11 @@ export function PreviewWebView({ onOpenFullscreen }: Props) {
           </View>
         )}
         onHttpError={(event) => {
-          console.warn('[PreviewWebView] HTTP error:', event.nativeEvent.statusCode, previewUrl);
+          const code = event.nativeEvent.statusCode;
+          // 404/503 = deployment not ready; capture so we show our placeholder
+          if (code === 404 || code >= 500) {
+            setHttpErrorCode(code);
+          }
         }}
       />
 
@@ -134,7 +182,7 @@ const styles = StyleSheet.create({
   },
   placeholderIcon: { fontSize: 36, color: '#334155', marginBottom: 12 },
   placeholderTitle: { color: '#94A3B8', fontSize: 15, fontWeight: '600', marginBottom: 6 },
-  placeholderSub: { color: '#475569', fontSize: 13, textAlign: 'center' },
+  placeholderSub: { color: '#475569', fontSize: 13, textAlign: 'center', lineHeight: 18, marginBottom: 16 },
 
   toolbar: {
     flexDirection: 'row',

@@ -17,13 +17,15 @@ interface Props {
   onClose: () => void;
   onCreate: (name: string, description: string) => Promise<void>;
   isLoading: boolean;
+  /** Current provisioning step text, e.g. "Forking template repository…" */
+  provisioningStatus?: string;
 }
 
 /**
  * Bottom-sheet modal for creating a new project.
  * Keeps the form state local — no need to pollute global stores.
  */
-export function CreateProjectModal({ visible, onClose, onCreate, isLoading }: Props) {
+export function CreateProjectModal({ visible, onClose, onCreate, isLoading, provisioningStatus }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
@@ -110,7 +112,14 @@ export function CreateProjectModal({ visible, onClose, onCreate, isLoading }: Pr
                 disabled={!canCreate || isLoading}
               >
                 {isLoading ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <View style={styles.loadingRow}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    {!!provisioningStatus && (
+                      <Text style={styles.provisioningText} numberOfLines={1}>
+                        {provisioningStatus}
+                      </Text>
+                    )}
+                  </View>
                 ) : (
                   <Text style={styles.createText}>Create Project</Text>
                 )}
@@ -203,4 +212,6 @@ const styles = StyleSheet.create({
   },
   createText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
   btnDisabled: { opacity: 0.4 },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  provisioningText: { color: '#C4B5FD', fontSize: 12, fontWeight: '500', flexShrink: 1 },
 });

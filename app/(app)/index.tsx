@@ -22,7 +22,7 @@ import { Project } from '../../src/types';
 export default function ProjectListScreen() {
   const {
     projects, fetchProjects, createProject, selectProject,
-    deleteProject, renameProject, isLoading,
+    deleteProject, renameProject, isLoading, provisioningStatus,
   } = useProjectStore();
   const { reset: resetChat } = useChatStore();
   const { setCredentials } = useGitHubStore();
@@ -115,7 +115,7 @@ export default function ProjectListScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <AntDesign name="folderopen" size={40} color="#334155" style={styles.emptyIcon} />
+            <AntDesign name="folder-open" size={40} color="#334155" style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>No projects yet</Text>
             <Text style={styles.emptyText}>
               Tap the + button to create your first AI-powered website
@@ -142,15 +142,16 @@ export default function ProjectListScreen() {
         onClose={() => setShowCreateModal(false)}
         onCreate={handleCreate}
         isLoading={isCreating}
+        provisioningStatus={provisioningStatus}
       />
 
       <GitHubCredentialsModal
         visible={showGitHub}
         onClose={() => setShowGitHub(false)}
         savedCredentials={savedGitHubCreds}
-        onSave={(creds) => {
+        onSave={async (creds) => {
           setSavedGitHubCreds(creds);
-          setCredentials(creds);   // also makes PAT available to githubService
+          await setCredentials(creds); // persists PAT to SecureStore + updates store
           setShowGitHub(false);
         }}
       />

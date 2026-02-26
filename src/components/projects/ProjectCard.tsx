@@ -129,7 +129,7 @@ export function ProjectCard({ project, onPress, onDelete, onRename }: Props) {
         </View>
 
         <TouchableOpacity
-          ref={menuBtnRef as React.RefObject<TouchableOpacity>}
+          ref={menuBtnRef}
           style={styles.menuBtn}
           onPress={(e) => { e.stopPropagation(); openDropdown(); }}
           hitSlop={8}

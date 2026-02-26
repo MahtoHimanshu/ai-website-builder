@@ -1,29 +1,53 @@
 import { create } from 'zustand';
+import * as SecureStore from 'expo-secure-store';
 import { GitHubCredentials } from '../components/projects/GitHubCredentialsModal';
+
+const SECURE_KEY = 'github.pat';
 
 interface GitHubState {
   credentials: GitHubCredentials | null;
-  /** Resolved PAT: saved credentials → env variable → null */
+  /** Resolved PAT: saved credentials → SecureStore → env variable → null */
   pat: string | null;
-  setCredentials: (creds: GitHubCredentials) => void;
-  clearCredentials: () => void;
+  setCredentials: (creds: GitHubCredentials) => Promise<void>;
+  clearCredentials: () => Promise<void>;
+  /** Load the persisted PAT from SecureStore on app startup. */
+  loadPersistedPat: () => Promise<void>;
 }
 
-function resolvedPat(creds: GitHubCredentials | null): string | null {
-  if (creds?.personalAccessToken) return creds.personalAccessToken;
-  // Fallback: env variable set in .env (EXPO_PUBLIC_ = bundled at build time)
-  const envPat = process.env.EXPO_PUBLIC_GITHUB_PAT;
-  return envPat && envPat.trim() ? envPat.trim() : null;
+function envPat(): string | null {
+  const v = process.env.EXPO_PUBLIC_GITHUB_PAT;
+  return v && v.trim() ? v.trim() : null;
 }
 
 export const useGitHubStore = create<GitHubState>()((set) => ({
   credentials: null,
-  // Eagerly resolve pat from env on startup
-  pat: resolvedPat(null),
+  // Eagerly seed from env var; SecureStore is async, loaded via loadPersistedPat()
+  pat: envPat(),
 
-  setCredentials: (creds) =>
-    set({ credentials: creds, pat: resolvedPat(creds) }),
+  setCredentials: async (creds) => {
+    const pat = creds.personalAccessToken?.trim() || null;
+    if (pat) {
+      await SecureStore.setItemAsync(SECURE_KEY, pat);
+    } else {
+      await SecureStore.deleteItemAsync(SECURE_KEY);
+    }
+    set({ credentials: creds, pat: pat ?? envPat() });
+  },
 
-  clearCredentials: () =>
-    set({ credentials: null, pat: resolvedPat(null) }),
+  clearCredentials: async () => {
+    await SecureStore.deleteItemAsync(SECURE_KEY);
+    set({ credentials: null, pat: envPat() });
+  },
+
+  loadPersistedPat: async () => {
+    try {
+      const stored = await SecureStore.getItemAsync(SECURE_KEY);
+      if (stored) {
+        set({ pat: stored });
+      }
+      // If nothing in SecureStore, keep whatever is already set (env var / null)
+    } catch {
+      // SecureStore unavailable (simulator without keychain, etc.) — ignore
+    }
+  },
 }));

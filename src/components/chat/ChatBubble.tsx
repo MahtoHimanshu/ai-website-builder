@@ -6,22 +6,62 @@ interface Props {
   message: ChatMessage;
 }
 
+// ─── Typing dots — shown while the assistant message is empty + streaming ─────
+
+function TypingDots() {
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+  const dot3 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const pulse = (dot: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0.3, duration: 300, useNativeDriver: true }),
+        ]),
+      );
+
+    const a1 = pulse(dot1, 0);
+    const a2 = pulse(dot2, 200);
+    const a3 = pulse(dot3, 400);
+    a1.start();
+    a2.start();
+    a3.start();
+    return () => { a1.stop(); a2.stop(); a3.stop(); };
+  }, [dot1, dot2, dot3]);
+
+  return (
+    <View style={styles.dotsRow}>
+      <Animated.View style={[styles.dot, { opacity: dot1 }]} />
+      <Animated.View style={[styles.dot, { opacity: dot2 }]} />
+      <Animated.View style={[styles.dot, { opacity: dot3 }]} />
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * ChatBubble renders a single message in the conversation.
  *
  * User messages appear right-aligned with an indigo background.
  * Assistant messages appear left-aligned with a dark card style.
  *
- * While a message is streaming (isStreaming=true), a blinking
- * cursor is shown at the end of the content to indicate live output.
+ * While a message is streaming with no content yet, three pulsing dots
+ * indicate the AI is working. Once content arrives, a blinking cursor
+ * at the end of the text indicates live output.
  */
 export function ChatBubble({ message }: Props) {
   const isUser = message.role === 'user';
   const cursorOpacity = useRef(new Animated.Value(1)).current;
 
-  // Blinking cursor animation — only active while streaming
+  const showDots = !isUser && message.isStreaming && message.content === '';
+
+  // Blinking cursor animation — only active while streaming with content present
   useEffect(() => {
-    if (!message.isStreaming) {
+    if (!message.isStreaming || message.content === '') {
       cursorOpacity.setValue(0);
       return;
     }
@@ -34,7 +74,7 @@ export function ChatBubble({ message }: Props) {
     );
     blink.start();
     return () => blink.stop();
-  }, [message.isStreaming, cursorOpacity]);
+  }, [message.isStreaming, message.content, cursorOpacity]);
 
   return (
     <View style={[styles.row, isUser ? styles.rowUser : styles.rowAssistant]}>
@@ -49,13 +89,19 @@ export function ChatBubble({ message }: Props) {
           isUser ? styles.bubbleUser : styles.bubbleAssistant,
         ]}
       >
-        <Text style={[styles.text, isUser ? styles.textUser : styles.textAssistant]}>
-          {message.content || (message.isStreaming ? '' : '_Empty response_')}
-        </Text>
-        {message.isStreaming && (
-          <Animated.Text style={[styles.cursor, { opacity: cursorOpacity }]}>
-            ▊
-          </Animated.Text>
+        {showDots ? (
+          <TypingDots />
+        ) : (
+          <>
+            <Text style={[styles.text, isUser ? styles.textUser : styles.textAssistant]}>
+              {message.content || (message.isStreaming ? '' : '_Empty response_')}
+            </Text>
+            {message.isStreaming && message.content !== '' && (
+              <Animated.Text style={[styles.cursor, { opacity: cursorOpacity }]}>
+                ▊
+              </Animated.Text>
+            )}
+          </>
         )}
       </View>
     </View>
@@ -109,4 +155,7 @@ const styles = StyleSheet.create({
   textAssistant: { color: '#E2E8F0' },
 
   cursor: { color: '#818CF8', fontSize: 14, marginLeft: 1 },
+
+  dotsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
+  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#818CF8' },
 });

@@ -26,6 +26,12 @@ export interface Project {
   description: string;
   /** Stable preview URL — server overwrites this file on each update */
   previewUrl: string;
+  /**
+   * Per-project GitHub repo in "owner/repo" format.
+   * Set when the project is backed by a forked template repo.
+   * Absent for mock/offline projects.
+   */
+  githubRepo?: string;
   status: 'idle' | 'generating' | 'deploying' | 'ready' | 'error';
   createdAt: string;
   updatedAt: string;

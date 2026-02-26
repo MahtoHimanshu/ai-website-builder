@@ -16,6 +16,7 @@ import { useProjectStore } from '../../../src/stores/projectStore';
 import { useChatStore } from '../../../src/stores/chatStore';
 import { useGitHubStore } from '../../../src/stores/githubStore';
 import { pushComment } from '../../../src/services/githubService';
+import { ENV } from '../../../src/config/env';
 import { PreviewWebView } from '../../../src/components/preview/PreviewWebView';
 import { ChatList } from '../../../src/components/chat/ChatList';
 import { ChatInput } from '../../../src/components/chat/ChatInput';
@@ -120,16 +121,26 @@ export default function WorkspaceScreen() {
     // 1. Normal chat flow (AI / mock)
     sendMessage(projectId, content);
 
-    // 2. Push comment to GitHub template repo — skip silently if no PAT configured
-    if (!pat) return;
+    // 2. Push comment to project's own GitHub repo (legacy SSE path only).
+    // Skip when any AI key is set — chatStore.sendMessage() handles GitHub directly.
+    if (!pat || ENV.geminiApiKey || ENV.zaiApiKey) return;
 
     setGhStatus('pushing');
     setGhMessage('Pushing to GitHub…');
 
     try {
-      await pushComment(pat, content);
+      // If this project has its own forked repo, push there; else fall back to template
+      const githubRepo = currentProject?.githubRepo;
+      let owner: string | undefined;
+      let repo: string | undefined;
+      if (githubRepo) {
+        [owner, repo] = githubRepo.split('/');
+      }
+
+      await pushComment(pat, content, owner, repo);
+      const repoLabel = githubRepo ?? 'website-service';
       setGhStatus('pushed');
-      setGhMessage('Pushed to website-service ✓');
+      setGhMessage(`Pushed to ${repoLabel} ✓`);
       setTimeout(() => setGhStatus('idle'), 3000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'GitHub push failed.';
@@ -138,7 +149,7 @@ export default function WorkspaceScreen() {
       // Auto-clear error after 6 s
       setTimeout(() => setGhStatus('idle'), 6000);
     }
-  }, [projectId, sendMessage, pat]);
+  }, [projectId, sendMessage, pat, currentProject]);
 
   const handleOpenFullscreen = useCallback(() => {
     router.push(`/(app)/preview/${projectId}`);
@@ -179,6 +190,16 @@ export default function WorkspaceScreen() {
       */}
       <View style={styles.chatPanel}>
         <StatusBanner status={buildStatus} message={statusMessage} />
+
+        {/* Deployment-pending notice — shown until Vercel has a live URL */}
+        {currentProject && !currentProject.previewUrl && buildStatus === 'idle' && (
+          <View style={styles.deployPendingBanner}>
+            <Text style={styles.deployPendingIcon}>⏳</Text>
+            <Text style={styles.deployPendingText}>
+              First deployment in progress — preview will appear once Vercel finishes building (~1 min).
+            </Text>
+          </View>
+        )}
 
         {/* GitHub push status */}
         {ghStatus !== 'idle' && (
@@ -279,6 +300,20 @@ const styles = StyleSheet.create({
   inputSafeArea: {
     backgroundColor: '#0A0D14',
   },
+
+  // ── Deployment pending banner ───────────────────────────────────
+  deployPendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    backgroundColor: '#0D1117',
+    borderLeftWidth: 3,
+    borderLeftColor: '#FB923C',
+    gap: 8,
+  },
+  deployPendingIcon: { fontSize: 13 },
+  deployPendingText: { color: '#94A3B8', fontSize: 11, flex: 1, lineHeight: 16 },
 
   // ── GitHub push banner ──────────────────────────────────────────
   ghBanner: {

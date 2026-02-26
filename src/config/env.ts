@@ -16,6 +16,12 @@ interface AppConfig {
   apiBaseUrl: string;
   /** Preview server base URL, e.g. https://preview.yourplatform.com */
   previewBaseUrl: string;
+  /** Vercel API token — used for programmatic project creation */
+  vercelToken: string;
+  /** Gemini API key — used for AI site.config.ts editing (fallback) */
+  geminiApiKey: string;
+  /** Z.AI API key — preferred AI provider (GLM-4, OpenAI-compatible) */
+  zaiApiKey: string;
   /** SSE connection timeout in milliseconds before treating as dead */
   sseTimeoutMs: number;
   /** Refresh the access token this many seconds before it expires */
@@ -34,6 +40,21 @@ export const ENV: AppConfig = {
     (process.env.EXPO_PUBLIC_PREVIEW_BASE_URL as string) ||
     extra.previewBaseUrl ||
     'http://localhost:3001',
+
+  vercelToken:
+    (process.env.EXPO_PUBLIC_VERCEL_TOKEN as string) ||
+    extra.vercelToken ||
+    '',
+
+  geminiApiKey:
+    (process.env.EXPO_PUBLIC_GEMINI_API_KEY as string) ||
+    extra.geminiApiKey ||
+    '',
+
+  zaiApiKey:
+    (process.env.EXPO_PUBLIC_ZAI_API_KEY as string) ||
+    extra.zaiApiKey ||
+    '',
 
   sseTimeoutMs: 120_000,
 
